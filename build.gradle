@@ -1,0 +1,73 @@
+plugins {
+    alias(libs.plugins.android.library)
+}
+
+android {
+    namespace 'com.tientoan.rikka.youtube_player'
+    compileSdk 34
+
+    defaultConfig {
+        minSdk 24
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        consumerProguardFiles "consumer-rules.pro"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    buildFeatures {
+        viewBinding true
+    }
+}
+
+ext {
+    exoPlayerVersion = '2.19.1'
+}
+
+dependencies {
+
+    implementation libs.appcompat
+    implementation libs.material
+    testImplementation libs.junit
+    androidTestImplementation libs.ext.junit
+    androidTestImplementation libs.espresso.core
+
+    // Androidx
+    implementation 'androidx.preference:preference:1.2.1'
+
+    // HTTP client
+    implementation "com.squareup.okhttp3:okhttp:4.12.0"
+    // HTML parser
+    implementation "org.jsoup:jsoup:1.17.2"
+
+    // Media player
+    implementation "com.google.android.exoplayer:exoplayer-core:${exoPlayerVersion}"
+    implementation "com.google.android.exoplayer:exoplayer-dash:${exoPlayerVersion}"
+    implementation "com.google.android.exoplayer:exoplayer-database:${exoPlayerVersion}"
+    implementation "com.google.android.exoplayer:exoplayer-datasource:${exoPlayerVersion}"
+    implementation "com.google.android.exoplayer:exoplayer-hls:${exoPlayerVersion}"
+    implementation "com.google.android.exoplayer:exoplayer-smoothstreaming:${exoPlayerVersion}"
+    implementation "com.google.android.exoplayer:exoplayer-ui:${exoPlayerVersion}"
+    implementation "com.google.android.exoplayer:extension-mediasession:${exoPlayerVersion}"
+
+    /** NewPipe libraries **/
+    implementation 'com.github.TeamNewPipe:NewPipeExtractor:v0.24.2'
+    implementation 'com.github.TeamNewPipe:nanojson:1d9e1aea9049fc9f85e68b43ba39fe7be1c1f751'
+
+    /** Desugaring **/
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs_nio:2.0.4'
+
+    // Reactive extensions for Java VM
+    implementation "io.reactivex.rxjava3:rxjava:3.1.8"
+    implementation "io.reactivex.rxjava3:rxandroid:3.0.2"
+
+}
