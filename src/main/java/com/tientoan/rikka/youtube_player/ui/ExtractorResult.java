@@ -1,4 +1,4 @@
-package com.tientoan.rikka.demo.ui;
+package com.tientoan.rikka.youtube_player.ui;
 
 public class ExtractorResult {
 
