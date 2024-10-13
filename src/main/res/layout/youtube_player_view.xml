@@ -23,8 +23,7 @@
         android:layout_height="wrap_content"
         android:layout_gravity="center"
         android:textColor="@android:color/holo_red_dark"
-        android:textSize="24dp"
-        android:textStyle="bold"
+        android:textSize="16dp"
         android:visibility="gone"
         tools:text="Error: Some errors occured!"
         tools:visibility="visible" />

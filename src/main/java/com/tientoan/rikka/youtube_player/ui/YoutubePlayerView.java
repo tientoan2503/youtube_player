@@ -3,6 +3,7 @@ package com.tientoan.rikka.youtube_player.ui;
 import android.content.Context;
 import android.net.Uri;
 import android.util.AttributeSet;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.FrameLayout;
@@ -19,10 +20,14 @@ import com.tientoan.rikka.youtube_player.newpipe_impl.DownloaderImpl;
 
 import org.schabi.newpipe.extractor.NewPipe;
 import org.schabi.newpipe.extractor.ServiceList;
+import org.schabi.newpipe.extractor.exceptions.ExtractionException;
+import org.schabi.newpipe.extractor.exceptions.ParsingException;
 import org.schabi.newpipe.extractor.stream.StreamExtractor;
+import org.schabi.newpipe.extractor.stream.StreamType;
 
 import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers;
 import io.reactivex.rxjava3.core.Single;
+import io.reactivex.rxjava3.core.SingleObserver;
 import io.reactivex.rxjava3.disposables.Disposable;
 import io.reactivex.rxjava3.schedulers.Schedulers;
 
@@ -33,6 +38,7 @@ public class YoutubePlayerView extends FrameLayout {
 
   public interface OnExtractComplete {
     void onSuccess();
+
     void onError(String errorMsg);
   }
 
@@ -69,11 +75,15 @@ public class YoutubePlayerView extends FrameLayout {
     }
 
     disposable = Single.create(emitter -> {
+          NewPipe.init(DownloaderImpl.init(null));
           try {
-            NewPipe.init(DownloaderImpl.init(null));
             StreamExtractor extractor = ServiceList.YouTube.getStreamExtractor(url);
-            extractor.fetchPage();
-            emitter.onSuccess(extractor.getVideoStreams().get(0).getContent());
+            if (extractor.getStreamType() == StreamType.VIDEO_STREAM) {
+              extractor.fetchPage();
+              emitter.onSuccess(extractor.getVideoStreams().get(0).getContent());
+            } else {
+              throw new ExtractionException("ExtractionException parse error: " + url);
+            }
           } catch (Exception e) {
             System.out.println("Failed to StreamExtractor " + e);
             emitter.onError(e);
@@ -81,20 +91,23 @@ public class YoutubePlayerView extends FrameLayout {
         })
         .subscribeOn(Schedulers.io())
         .observeOn(AndroidSchedulers.mainThread())
-        .doOnSuccess(streamUrl -> {
-          MediaItem mediaItem = MediaItem.fromUri(Uri.parse((String) streamUrl));
-          player.setMediaItem(mediaItem);
-          player.prepare();
-          player.setPlayWhenReady(true);
-          onExtractComplete.onSuccess();
-        })
-        .doOnError(error -> {
-          String errorMsg = error.getMessage();
-          binding.errorMsg.setText(errorMsg);
-          onExtractComplete.onError(errorMsg);
-        })
         .doFinally(() -> binding.progressCircular.setVisibility(View.GONE))
-        .subscribe();
+        .subscribe(
+            success -> {
+              binding.errorMsg.setVisibility(View.GONE);
+              MediaItem mediaItem = MediaItem.fromUri(Uri.parse((String) success));
+              player.setMediaItem(mediaItem);
+              player.prepare();
+              player.setPlayWhenReady(true);
+              onExtractComplete.onSuccess();
+            },
+            error -> {
+              String errorMsg = error.getMessage();
+              binding.errorMsg.setText(errorMsg);
+              binding.errorMsg.setVisibility(View.VISIBLE);
+              onExtractComplete.onError(errorMsg);
+            }
+        );
   }
 
   public ExoPlayer getPlayer() {
