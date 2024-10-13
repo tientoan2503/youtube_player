@@ -12,6 +12,8 @@ import androidx.annotation.Nullable;
 
 import com.google.android.exoplayer2.ExoPlayer;
 import com.google.android.exoplayer2.MediaItem;
+import com.google.android.exoplayer2.PlaybackException;
+import com.google.android.exoplayer2.Player;
 import com.tientoan.rikka.youtube_player.databinding.YoutubePlayerViewBinding;
 import com.tientoan.rikka.youtube_player.newpipe_impl.DownloaderImpl;
 
@@ -29,22 +31,17 @@ public class YoutubePlayerView extends FrameLayout {
   private Disposable disposable;
   private final YoutubePlayerViewBinding binding;
 
-  /**
-   * Constructor for YoutubePlayerView.
-   * Initializes the custom view and player.
-   *
-   * @param context - Context in which the view is running.
-   * @param attrs - AttributeSet used for XML attributes.
-   */
+  public interface OnExtractComplete {
+    void onSuccess();
+    void onError(String errorMsg);
+  }
+
   public YoutubePlayerView(@NonNull Context context, @Nullable AttributeSet attrs) {
     super(context, attrs);
     binding = YoutubePlayerViewBinding.inflate(LayoutInflater.from(context), this, true);
     initPlayer();
   }
 
-  /**
-   * Initializes the ExoPlayer instance and binds it to the player view.
-   */
   private void initPlayer() {
     player = new ExoPlayer.Builder(getContext()).build();
     binding.playerView.setPlayer(player);
@@ -55,100 +52,75 @@ public class YoutubePlayerView extends FrameLayout {
    *
    * @param url - The YouTube video URL to extract.
    */
-  public void extractYoutubeLink(String url) {
-    // Show progress bar while extracting video stream
+  public void extractYoutubeLink(String url, OnExtractComplete onExtractComplete) {
     binding.progressCircular.setVisibility(View.VISIBLE);
 
-    // Dispose of any previous extraction process
     if (disposable != null) {
       disposable.dispose();
       disposable = null;
     }
 
-    // Reinitialize player if necessary
     if (player == null) {
       initPlayer();
     }
 
-    // Stop the player if it's currently playing
     if (player.isPlaying()) {
       player.stop();
     }
 
-    // Start extracting the video link
-    disposable = Single.fromCallable(() -> {
+    disposable = Single.create(emitter -> {
           try {
-            // Initialize NewPipe extractor with a custom downloader
             NewPipe.init(DownloaderImpl.init(null));
-
-            // Get the stream extractor for YouTube video
             StreamExtractor extractor = ServiceList.YouTube.getStreamExtractor(url);
-
-            // Fetch video streams
             extractor.fetchPage();
-
-            // Return a success result with the extracted video stream
-            return new ExtractorResult(ExtractorResult.Status.SUCCESS, extractor.getVideoStreams().get(0).getContent(), null);
+            emitter.onSuccess(extractor.getVideoStreams().get(0).getContent());
           } catch (Exception e) {
-            // Handle extraction failure
             System.out.println("Failed to StreamExtractor " + e);
-            return new ExtractorResult(ExtractorResult.Status.ERROR, null, e);
+            emitter.onError(e);
           }
         })
-        .subscribeOn(Schedulers.io()) // Run extraction on IO thread
-        .observeOn(AndroidSchedulers.mainThread()) // Observe results on the main thread
-        .subscribe(result -> {
-          // Hide progress bar after extraction completes
-          binding.progressCircular.setVisibility(View.GONE);
-
-          // Check if extraction was successful
-          if (result.getStatus() == ExtractorResult.Status.SUCCESS) {
-            // Create a MediaItem from the extracted video URL
-            MediaItem mediaItem = MediaItem.fromUri(Uri.parse(result.getUrl()));
-
-            // Set the media item to the player and prepare for playback
-            player.setMediaItem(mediaItem);
-            player.prepare();
-            player.setPlayWhenReady(true); // Start playing the video immediately
-          } else {
-            // Display the error message if extraction failed
-            binding.errorMsg.setText(result.getError().getMessage());
-          }
-        });
+        .subscribeOn(Schedulers.io())
+        .observeOn(AndroidSchedulers.mainThread())
+        .doOnSuccess(streamUrl -> {
+          MediaItem mediaItem = MediaItem.fromUri(Uri.parse((String) streamUrl));
+          player.setMediaItem(mediaItem);
+          player.prepare();
+          player.setPlayWhenReady(true);
+          onExtractComplete.onSuccess();
+        })
+        .doOnError(error -> {
+          String errorMsg = error.getMessage();
+          binding.errorMsg.setText(errorMsg);
+          onExtractComplete.onError(errorMsg);
+        })
+        .doFinally(() -> binding.progressCircular.setVisibility(View.GONE))
+        .subscribe();
   }
 
-  /**
-   * Returns the ExoPlayer instance associated with this view.
-   *
-   * @return ExoPlayer instance.
-   */
   public ExoPlayer getPlayer() {
     return player;
   }
 
-  /**
-   * Releases the ExoPlayer and disposes of any ongoing extraction process.
-   */
+  public void setPlayerListener(Player.Listener listener) {
+    player.addListener(listener);
+  }
+
   public void release() {
-    // Dispose of the extraction process if it's running
     if (disposable != null) {
       disposable.dispose();
       disposable = null;
     }
 
-    // Release the player resources
     if (player != null) {
       player.release();
       player = null;
     }
   }
 
-  /**
-   * Ensures the player is released when the view is detached from the window.
-   */
   @Override
   protected void onDetachedFromWindow() {
     super.onDetachedFromWindow();
     release();
   }
+
 }
