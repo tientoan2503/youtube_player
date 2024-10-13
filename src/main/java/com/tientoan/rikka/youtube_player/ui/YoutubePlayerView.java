@@ -78,12 +78,8 @@ public class YoutubePlayerView extends FrameLayout {
           NewPipe.init(DownloaderImpl.init(null));
           try {
             StreamExtractor extractor = ServiceList.YouTube.getStreamExtractor(url);
-            if (extractor.getStreamType() == StreamType.VIDEO_STREAM) {
-              extractor.fetchPage();
-              emitter.onSuccess(extractor.getVideoStreams().get(0).getContent());
-            } else {
-              throw new ExtractionException("ExtractionException parse error: " + url);
-            }
+            extractor.fetchPage();
+            emitter.onSuccess(extractor.getVideoStreams().get(0).getContent());
           } catch (Exception e) {
             System.out.println("Failed to StreamExtractor " + e);
             emitter.onError(e);
