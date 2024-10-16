@@ -15,6 +15,7 @@ import com.google.android.exoplayer2.ExoPlayer;
 import com.google.android.exoplayer2.MediaItem;
 import com.google.android.exoplayer2.Player;
 import com.tientoan.rikka.youtube_player.databinding.YoutubePlayerViewBinding;
+import com.tientoan.rikka.youtube_player.model.VideoYoutube;
 import com.tientoan.rikka.youtube_player.newpipe_impl.DownloaderImpl;
 
 import org.schabi.newpipe.extractor.NewPipe;
@@ -37,7 +38,7 @@ public class YoutubePlayerView extends FrameLayout {
   private final YoutubePlayerViewBinding binding;
 
   public interface OnExtractComplete {
-    void onSuccess();
+    void onSuccess(String title);
 
     void onError(String errorMsg);
   }
@@ -54,7 +55,7 @@ public class YoutubePlayerView extends FrameLayout {
   }
 
   /**
-   * Extracts a YouTube video link, fetches video streams, and plays the video using ExoPlayer.
+   * Extracts a YouTube video link, fetches video streams
    *
    * @param url - The YouTube video URL to extract.
    */
@@ -73,7 +74,44 @@ public class YoutubePlayerView extends FrameLayout {
     if (player.isPlaying()) {
       player.stop();
     }
+
     // Set global error handler for undeliverable exceptions
+    catchRxException();
+
+    disposable = Single.create(emitter -> {
+          NewPipe.init(DownloaderImpl.init(null));
+          try {
+            StreamExtractor extractor = ServiceList.YouTube.getStreamExtractor(url);
+            extractor.fetchPage();
+            emitter.onSuccess(new VideoYoutube(extractor.getName(), extractor.getVideoStreams().get(0).getContent()));
+          } catch (Exception e) {
+            System.out.println("Failed to StreamExtractor " + e);
+            emitter.onError(e);
+          }
+        })
+        .subscribeOn(Schedulers.io())
+        .observeOn(AndroidSchedulers.mainThread())
+        .doFinally(() -> binding.progressCircular.setVisibility(View.GONE))
+        .subscribe(
+            result -> {
+              VideoYoutube video = (VideoYoutube) result;
+              binding.errorMsg.setVisibility(View.GONE);
+              MediaItem mediaItem = MediaItem.fromUri(Uri.parse(video.getStreamUrl()));
+              player.setMediaItem(mediaItem);
+              player.prepare();
+              player.setPlayWhenReady(false);
+              onExtractComplete.onSuccess(video.getTitle());
+            },
+            error -> {
+              String errorMsg = error.getMessage();
+              binding.errorMsg.setText(errorMsg);
+              binding.errorMsg.setVisibility(View.VISIBLE);
+              onExtractComplete.onError(errorMsg);
+            }
+        );
+  }
+
+  private void catchRxException() {
     RxJavaPlugins.setErrorHandler(e -> {
       if (e instanceof UndeliverableException) {
         e = e.getCause();
@@ -107,37 +145,6 @@ public class YoutubePlayerView extends FrameLayout {
       }
       Log.e("RxJavaError", "Undeliverable exception received: " + e.getMessage());
     });
-
-    disposable = Single.create(emitter -> {
-          NewPipe.init(DownloaderImpl.init(null));
-          try {
-            StreamExtractor extractor = ServiceList.YouTube.getStreamExtractor(url);
-            extractor.fetchPage();
-            emitter.onSuccess(extractor.getVideoStreams().get(0).getContent());
-          } catch (Exception e) {
-            System.out.println("Failed to StreamExtractor " + e);
-            emitter.onError(e);
-          }
-        })
-        .subscribeOn(Schedulers.io())
-        .observeOn(AndroidSchedulers.mainThread())
-        .doFinally(() -> binding.progressCircular.setVisibility(View.GONE))
-        .subscribe(
-            success -> {
-              binding.errorMsg.setVisibility(View.GONE);
-              MediaItem mediaItem = MediaItem.fromUri(Uri.parse((String) success));
-              player.setMediaItem(mediaItem);
-              player.prepare();
-              player.setPlayWhenReady(true);
-              onExtractComplete.onSuccess();
-            },
-            error -> {
-              String errorMsg = error.getMessage();
-              binding.errorMsg.setText(errorMsg);
-              binding.errorMsg.setVisibility(View.VISIBLE);
-              onExtractComplete.onError(errorMsg);
-            }
-        );
   }
 
   public ExoPlayer getPlayer() {
