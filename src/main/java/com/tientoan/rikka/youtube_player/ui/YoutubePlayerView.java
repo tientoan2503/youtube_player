@@ -3,6 +3,7 @@ package com.tientoan.rikka.youtube_player.ui;
 import android.content.Context;
 import android.net.Uri;
 import android.util.AttributeSet;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.FrameLayout;
@@ -20,9 +21,14 @@ import org.schabi.newpipe.extractor.NewPipe;
 import org.schabi.newpipe.extractor.ServiceList;
 import org.schabi.newpipe.extractor.stream.StreamExtractor;
 
+import java.io.IOException;
+import java.io.InterruptedIOException;
+
 import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers;
 import io.reactivex.rxjava3.core.Single;
 import io.reactivex.rxjava3.disposables.Disposable;
+import io.reactivex.rxjava3.exceptions.UndeliverableException;
+import io.reactivex.rxjava3.plugins.RxJavaPlugins;
 import io.reactivex.rxjava3.schedulers.Schedulers;
 
 public class YoutubePlayerView extends FrameLayout {
@@ -67,6 +73,40 @@ public class YoutubePlayerView extends FrameLayout {
     if (player.isPlaying()) {
       player.stop();
     }
+    // Set global error handler for undeliverable exceptions
+    RxJavaPlugins.setErrorHandler(e -> {
+      if (e instanceof UndeliverableException) {
+        e = e.getCause();
+      }
+      if (e instanceof InterruptedIOException) {
+        // Fine, some blocking code was interrupted by a dispose call
+        Log.w("RxJavaError", "Stream was interrupted: " + e.getMessage());
+        return;
+      }
+      if (e instanceof IOException) {
+        // Network problem or API that throws on cancellation, no big deal
+        Log.w("RxJavaError", "Network or IO issue: " + e.getMessage());
+        return;
+      }
+      if (e instanceof InterruptedException) {
+        // Fine, let it terminate
+        Log.w("RxJavaError", "Thread was interrupted: " + e.getMessage());
+        return;
+      }
+      if (e instanceof NullPointerException || e instanceof IllegalArgumentException) {
+        // Likely a bug in the application
+        Thread.currentThread().getUncaughtExceptionHandler()
+            .uncaughtException(Thread.currentThread(), e);
+        return;
+      }
+      if (e instanceof IllegalStateException) {
+        // Likely a bug in RxJava or a custom operator
+        Thread.currentThread().getUncaughtExceptionHandler()
+            .uncaughtException(Thread.currentThread(), e);
+        return;
+      }
+      Log.e("RxJavaError", "Undeliverable exception received: " + e.getMessage());
+    });
 
     disposable = Single.create(emitter -> {
           NewPipe.init(DownloaderImpl.init(null));
